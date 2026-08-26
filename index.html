@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Departures — one button, one random AI</title>
+<meta name="description" content="Press the button. Get sent to a random AI. That's the whole site.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --board:      #101a1e;
+    --board-edge: #060b0d;
+    --flap:       #16262b;
+    --flap-line:  #060b0d;
+    --ink:        #7fe3d4;
+    --ink-dim:    #3f6b66;
+    --accent:     #d99a3d;
+    --accent-hi:  #e8ab52;
+    --paper:      #cddbd9;
+    --paper-dim:  #6e8481;
+    --bg:         #070d0f;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 50% -10%, rgba(127,227,212,0.07), transparent 55%),
+      radial-gradient(ellipse at 50% 110%, rgba(217,154,61,0.05), transparent 55%);
+    color: var(--paper);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .wordmark {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.42em;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+
+  .tagline {
+    margin: 0 0 34px;
+    font-size: 15.5px;
+    line-height: 1.5;
+    color: var(--paper-dim);
+    max-width: 380px;
+  }
+
+  .tagline strong {
+    color: var(--paper);
+    font-weight: 600;
+  }
+
+  /* ---------------------------------------------------------- board */
+
+  .board {
+    background: var(--board);
+    border: 1px solid #24363b;
+    border-radius: 6px;
+    padding: 20px 18px 16px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04) inset,
+      0 30px 60px -20px rgba(0,0,0,0.7);
+    position: relative;
+  }
+
+  .board::before {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 1px solid rgba(127,227,212,0.08);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  .board-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.28em;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .flap-row {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .flap-cell {
+    position: relative;
+    width: 34px;
+    height: 46px;
+    background: var(--flap);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+  }
+
+  .flap-cell::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 1px;
+    background: var(--flap-line);
+    transform: translateY(-0.5px);
+    z-index: 2;
+  }
+
+  .flap-cell .char {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--ink);
+    line-height: 1;
+    transform-origin: center;
+    backface-visibility: hidden;
+  }
+
+  .flap-cell.flipping .char {
+    animation: flipTick 0.11s linear;
+  }
+
+  @keyframes flipTick {
+    0%   { transform: rotateX(0deg); }
+    45%  { transform: rotateX(-90deg); opacity: 0.4; }
+    55%  { transform: rotateX(-90deg); opacity: 0.4; }
+    100% { transform: rotateX(0deg); }
+  }
+
+  .flap-cell.settled .char {
+    animation: settle 0.32s ease-out;
+  }
+
+  @keyframes settle {
+    0%   { color: var(--ink); }
+    35%  { color: #eafff9; }
+    100% { color: var(--ink); }
+  }
+
+  .board-caption {
+    margin-top: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--paper-dim);
+    min-height: 16px;
+  }
+
+  .board-caption .name {
+    color: var(--ink);
+  }
+
+  /* ---------------------------------------------------------- button */
+
+  .action {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+  }
+
+  /* ---------------------------------------------------------- plane */
+
+  .plane {
+    position: absolute;
+    top: 27px;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    color: var(--accent-hi);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(45deg) scale(0.85);
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+    z-index: 20;
+  }
+
+  .plane svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .plane.flying {
+    animation: takeoff 1.3s cubic-bezier(0.4, 0, 0.4, 1) forwards;
+  }
+
+  @keyframes takeoff {
+    0%   { transform: translate(-50%, -50%) rotate(45deg) scale(0.8); opacity: 0; }
+    12%  { opacity: 1; }
+    65%  { opacity: 1; }
+    100% { transform: translate(calc(-50% + 260px), calc(-50% - 400px)) rotate(45deg) scale(1.25); opacity: 0; }
+  }
+
+  .go-btn {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--paper);
+    background: var(--accent);
+    border: none;
+    padding: 16px 38px;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 8px 0 #8a5e18, 0 10px 24px rgba(217,154,61,0.22);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
+  }
+
+  .go-btn:hover { background: var(--accent-hi); }
+
+  .go-btn:active {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #8a5e18, 0 4px 10px rgba(217,154,61,0.18);
+  }
+
+  .go-btn:disabled {
+    cursor: default;
+    opacity: 0.75;
+    transform: translateY(2px);
+    box-shadow: 0 4px 0 #8a5e18;
+  }
+
+  .go-btn:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+
+  .fallback-link {
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    color: var(--paper-dim);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    min-height: 18px;
+  }
+
+  .fallback-link a {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--ink-dim);
+  }
+
+  .fallback-link a:hover { border-bottom-color: var(--ink); }
+
+  .tally {
+    font-size: 12px;
+    color: var(--paper-dim);
+    opacity: 0.7;
+  }
+
+  /* ---------------------------------------------------------- pool disclosure */
+
+  details.pool {
+    margin-top: 40px;
+    font-size: 13px;
+  }
+
+  details.pool summary {
+    cursor: pointer;
+    color: var(--paper-dim);
+    list-style: none;
+    font-family: 'Inter', sans-serif;
+  }
+
+  details.pool summary::-webkit-details-marker { display: none; }
+
+  details.pool summary:hover { color: var(--paper); }
+
+  details.pool summary::after {
+    content: ' ▾';
+  }
+
+  details.pool[open] summary::after {
+    content: ' ▴';
+  }
+
+  .pool-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 6px 24px;
+    max-width: 320px;
+    text-align: left;
+  }
+
+  .pool-grid span {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--paper-dim);
+    padding: 2px 0;
+    border-bottom: 1px dotted rgba(110,132,129,0.28);
+  }
+
+  footer {
+    margin-top: 36px;
+    font-size: 11.5px;
+    color: var(--ink-dim);
+  }
+
+  @media (max-width: 420px) {
+    .flap-cell { width: 26px; height: 38px; }
+    .flap-cell .char { font-size: 20px; }
+    .go-btn { padding: 14px 28px; font-size: 13.5px; }
+
+    @keyframes takeoff {
+      0%   { transform: translate(-50%, -50%) rotate(45deg) scale(0.8); opacity: 0; }
+      12%  { opacity: 1; }
+      65%  { opacity: 1; }
+      100% { transform: translate(calc(-50% + 150px), calc(-50% - 240px)) rotate(45deg) scale(1.15); opacity: 0; }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flap-cell.flipping .char,
+    .flap-cell.settled .char {
+      animation: none !important;
+    }
+
+    .plane.flying {
+      animation: none !important;
+      opacity: 0 !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<main class="stage">
+  <p class="wordmark">Departures</p>
+  <p class="tagline">One button. One destination. <strong>You don't get to pick.</strong> Press it, and you'll be sent to a random AI chat — a different one, on purpose, every time.</p>
+
+  <div class="board" role="group" aria-label="Departure board">
+    <div class="board-label">Now boarding</div>
+    <div class="flap-row" id="flapRow" aria-hidden="true"></div>
+    <div class="board-caption" id="caption" aria-live="polite">10 characters · 14 possible destinations</div>
+  </div>
+
+  <div class="action">
+    <button class="go-btn" id="goBtn" type="button">Take me there</button>
+    <p class="fallback-link" id="fallback"></p>
+    <p class="tally" id="tally"></p>
+    <div class="plane" id="plane" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2.5 1.5V22l3.5-1 3.5 1v-1.5L13 19v-4.5l8 2.5z"/></svg>
+    </div>
+  </div>
+
+  <details class="pool">
+    <summary>Who's in the pool?</summary>
+    <div class="pool-grid" id="poolGrid"></div>
+  </details>
+
+  <footer>No account, no tracking, no memory of which one you got last time.</footer>
+</main>
+
+<script>
+(function () {
+
+  var DESTINATIONS = [
+    { name: 'ChatGPT',    url: 'https://chatgpt.com/' },
+    { name: 'Claude',     url: 'https://claude.ai/new' },
+    { name: 'Gemini',     url: 'https://gemini.google.com/app' },
+    { name: 'Grok',       url: 'https://grok.com/' },
+    { name: 'Perplexity', url: 'https://www.perplexity.ai/' },
+    { name: 'Copilot',    url: 'https://copilot.microsoft.com/' },
+    { name: 'Mistral',    url: 'https://chat.mistral.ai/' },
+    { name: 'Meta AI',    url: 'https://www.meta.ai/' },
+    { name: 'DeepSeek',   url: 'https://chat.deepseek.com/' },
+    { name: 'Poe',        url: 'https://poe.com/' },
+    { name: 'Qwen',       url: 'https://chat.qwen.ai/' },
+    { name: 'Kimi',       url: 'https://kimi.ai/' },
+    { name: 'GLM',        url: 'https://chat.z.ai/' },
+    { name: 'Arena',      url: 'https://arena.ai/' }
+  ];
+
+  var CELLS = 10;
+  var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var flapRow = document.getElementById('flapRow');
+  var goBtn = document.getElementById('goBtn');
+  var caption = document.getElementById('caption');
+  var fallback = document.getElementById('fallback');
+  var tallyEl = document.getElementById('tally');
+  var poolGrid = document.getElementById('poolGrid');
+  var plane = document.getElementById('plane');
+
+  var cells = [];
+  var idleTimer = null;
+  var isRolling = false;
+
+  function buildBoard() {
+    for (var i = 0; i < CELLS; i++) {
+      var cell = document.createElement('div');
+      cell.className = 'flap-cell';
+      var span = document.createElement('span');
+      span.className = 'char';
+      span.textContent = '·';
+      cell.appendChild(span);
+      flapRow.appendChild(cell);
+      cells.push({ el: cell, span: span });
+    }
+  }
+
+  function setChar(cellObj, ch) {
+    cellObj.el.classList.remove('flipping');
+    void cellObj.el.offsetWidth; // force reflow to restart animation
+    cellObj.el.classList.add('flipping');
+    cellObj.span.textContent = ch;
+  }
+
+  function padName(name) {
+    var upper = name.toUpperCase();
+    var total = CELLS - upper.length;
+    var left = Math.floor(total / 2);
+    var right = total - left;
+    return ' '.repeat(Math.max(left, 0)) + upper + ' '.repeat(Math.max(right, 0));
+  }
+
+  function randomLetter() {
+    return LETTERS.charAt(Math.floor(Math.random() * LETTERS.length));
+  }
+
+  function buildPool() {
+    DESTINATIONS.forEach(function (d) {
+      var span = document.createElement('span');
+      span.textContent = d.name;
+      poolGrid.appendChild(span);
+    });
+  }
+
+  function bumpTally() {
+    var n = parseInt(localStorage.getItem('departuresCount') || '0', 10) + 1;
+    localStorage.setItem('departuresCount', String(n));
+    tallyEl.textContent = n === 1 ? 'First trip.' : 'Trip #' + n + '.';
+  }
+
+  function showTally() {
+    var n = parseInt(localStorage.getItem('departuresCount') || '0', 10);
+    if (n > 0) tallyEl.textContent = 'Trips so far: ' + n;
+  }
+
+  function roll() {
+    if (isRolling) return;
+    isRolling = true;
+    clearInterval(idleTimer);
+
+    goBtn.disabled = true;
+    goBtn.textContent = 'Boarding…';
+    caption.textContent = 'Rolling the dice…';
+    fallback.innerHTML = '&nbsp;';
+
+    plane.classList.remove('flying');
+    void plane.offsetWidth; // force reflow to restart animation
+    plane.classList.add('flying');
+
+    var dest = DESTINATIONS[Math.floor(Math.random() * DESTINATIONS.length)];
+    var target = padName(dest.name);
+
+    if (reduceMotion) {
+      cells.forEach(function (cellObj, i) { cellObj.span.textContent = target[i]; });
+      land(dest);
+      return;
+    }
+
+    var settleBase = 480;
+    var settleStep = 85;
+    var doneCount = 0;
+
+    cells.forEach(function (cellObj, i) {
+      var settleAt = settleBase + i * settleStep;
+
+      var tickTimer = setInterval(function () {
+        setChar(cellObj, randomLetter());
+      }, 55);
+
+      setTimeout(function () {
+        clearInterval(tickTimer);
+        setChar(cellObj, target[i]);
+        cellObj.el.classList.remove('settled');
+        void cellObj.el.offsetWidth;
+        cellObj.el.classList.add('settled');
+        doneCount++;
+        if (doneCount === CELLS) {
+          setTimeout(function () { land(dest); }, 120);
+        }
+      }, settleAt);
+    });
+  }
+
+  function land(dest) {
+    caption.innerHTML = 'Destination: <span class="name">' + dest.name + '</span>';
+    goBtn.disabled = false;
+    goBtn.textContent = 'Again →';
+    fallback.innerHTML = 'If nothing opened, <a href="' + dest.url + '" target="_blank" rel="noopener">go to ' + dest.name + ' →</a>';
+    bumpTally();
+
+    var win = window.open(dest.url, '_blank', 'noopener');
+    isRolling = false;
+
+    startIdle();
+  }
+
+  function idleFlicker() {
+    if (isRolling) return;
+    var i = Math.floor(Math.random() * CELLS);
+    var cellObj = cells[i];
+    if (cellObj.span.textContent.trim() === '') {
+      setChar(cellObj, randomLetter());
+      setTimeout(function () { setChar(cellObj, ' '); }, 900);
+    }
+  }
+
+  function startIdle() {
+    clearInterval(idleTimer);
+    if (reduceMotion) return;
+    idleTimer = setInterval(idleFlicker, 2600);
+  }
+
+  buildBoard();
+  buildPool();
+  showTally();
+  startIdle();
+
+  goBtn.addEventListener('click', roll);
+})();
+</script>
+
+</body>
+</html>
