@@ -378,7 +378,7 @@
   <div class="board" role="group" aria-label="Departure board">
     <div class="board-label">Now boarding</div>
     <div class="flap-row" id="flapRow" aria-hidden="true"></div>
-    <div class="board-caption" id="caption" aria-live="polite">15 AI models · 1 random departure</div>
+    <div class="board-caption" id="caption" aria-live="polite">21 AI models · 1 random departure</div>
   </div>
 
   <div class="action">
@@ -416,7 +416,13 @@
     { name: 'Kimi',       url: 'https://kimi.ai/' },
     { name: 'GLM',        url: 'https://chat.z.ai/' },
     { name: 'MiniMax',    url: 'https://chat.minimax.io/' },
-    { name: 'Arena',      url: 'https://arena.ai/' }
+    { name: 'Arena',      url: 'https://arena.ai/' },
+    { name: 'Duck.ai',    url: 'https://duck.ai/' },
+    { name: 'Lumo',       url: 'https://lumo.proton.me/' },
+    { name: 'Pi',         url: 'https://pi.ai/' },
+    { name: 'Venice',     url: 'https://venice.ai/' },
+    { name: 'OLMo',       url: 'https://playground.allenai.org/' },
+    { name: 'Nova',       url: 'https://nova.amazon.com/' }
   ];
 
   var CELLS = 10;
@@ -618,6 +624,7 @@
 
   buildBoard();
   buildPool();
+  caption.textContent = DESTINATIONS.length + ' AI models · 1 random departure';
   showTally();
   startIdle();
 
